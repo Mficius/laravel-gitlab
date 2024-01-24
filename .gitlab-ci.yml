@@ -1,0 +1,64 @@
+variables:
+  IMAGE_NAME: registry.gitlab.com/xxxxx
+  IMAGE_TAG: version-1.1
+  DOCKER_REGISTRY: registry.gitlab.com
+  ServerDNS: ec2-35-181-205-146.eu-west-3.compute.amazonaws.com 
+  ARTIFACT_PROJECT: /builds/dev-initialde/site-mairie
+
+stages:
+ # - test
+  - build
+  - deploy 
+
+#run_tests:
+#  stage: test
+#  image: python:3.9-slim-buster
+#  before_script:
+#    - apt-get update && apt-get install make
+#  script: 
+#    - make test 
+
+
+build_image:
+  stage: build
+  image: docker
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - docker login $DOCKER_REGISTRY -u $REGISTRY_USER -p $REGISTRY_PASS 
+  script:
+    - docker build -t $IMAGE_NAME:$IMAGE_TAG .
+    - docker push $IMAGE_NAME:$IMAGE_TAG 
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'  # Run for all changes to a merge request's source branch
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH    
+
+
+
+deploy:
+  stage: deploy
+  before_script:
+    - apt-get update -qy
+    - apt-get install -y sshpass
+    - chmod 400 $SSH_KEY
+  script:
+    - ssh -o StrictHostKeyChecking=no -i $SSH_KEY ubuntu@$ServerDNS "
+        sudo rm -r site-mairie"
+
+    - scp -o StrictHostKeyChecking=no -i $SSH_KEY -r $ARTIFACT_PROJECT ubuntu@$ServerDNS:.
+
+    - ssh -o StrictHostKeyChecking=no -i $SSH_KEY ubuntu@$ServerDNS "
+        cd site-mairie &&        
+        docker login $DOCKER_REGISTRY -u $REGISTRY_USER -p $REGISTRY_PASS &&  
+        docker pull $IMAGE_NAME:$IMAGE_TAG &&       
+        docker stack deploy -c docker-swarm.yml laravel-site &&
+        docker service update --image $IMAGE_NAME:$IMAGE_TAG laravel-site_site_owendo --force"
+         
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH    
+
+

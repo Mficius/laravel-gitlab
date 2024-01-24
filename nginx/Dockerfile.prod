@@ -1,0 +1,6 @@
+FROM nginx:latest
+
+COPY ./nginx/nginx_prod.conf /etc/nginx/nginx.conf
+#COPY sites-available/default /etc/nginx/sites-available/default
+
+COPY --chown=www-data . /var/www/

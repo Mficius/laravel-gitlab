@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:  
+  mysql:
+    image: 'mysql/mysql-server:8.0'
+    deploy:
+      replicas: 1
+      update_config: 
+          order: start-first
+    environment:
+        MYSQL_ROOT_PASSWORD: 
+        MYSQL_ROOT_HOST: '%'
+        MYSQL_DATABASE: 'site_owendo'
+        MYSQL_USER: 'root'
+        MYSQL_PASSWORD: ''
+        MYSQL_ALLOW_EMPTY_PASSWORD: 1
+    ports:
+        - '${FORWARD_DB_PORT:-3306}:3306' # Map host port 3306 to container port 3306
+
+    hostname: mysql-acess
+ 
+    volumes:
+       - db-data:/var/lib/mysql
+
+
+  site_owendo:
+      image: 'registry.gitlab.com/dev-initialde/site-mairie:version-1.1'
+      deploy:
+        replicas: 2        
+     
+      environment:
+          - APP_ENV=production
+          - APP_DEBUG=true
+          - APP_KEY=base64:BPUbkwUI/PZK29UkgVmmweDSe+ulTMCchu15+ORNkh0=
+                    
+
+      command: ["sh", "-c", "echo 'yes' | php artisan migrate:fresh --seed"]
+      #container_name: 'api'
+      working_dir: /var/www
+      volumes:
+          - ./:/var/www
+          - /var/www/vendor          
+      ports:
+          - 9000:9000
+      depends_on:
+         - mysql
+
+
+  nginx:
+    image: nginx:latest
+    deploy:
+      replicas: 1
+    working_dir: /var/www
+    ports:
+      - "80:80"
+    volumes:
+      - .:/var/www/
+      - ./nginx/nginx_prod.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - site_owendo
+   
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    #container_name: 'laravel-phpmyadmin'
+    deploy:
+      replicas: 1
+    #restart: always
+    ports:
+      - 8081:80
+    environment:
+      PMA_HOST: mysql-acess
+      PMA_USER: 'root'
+      PMA_PASSWORD: ''
+
+    depends_on:
+     - mysql
+
+volumes:
+  db-data: ~
+
